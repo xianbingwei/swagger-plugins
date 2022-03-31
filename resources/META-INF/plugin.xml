@@ -1,0 +1,32 @@
+<idea-plugin>
+  <id>com.your.company.unique.plugin.id</id>
+  <name>Swg Helper</name>
+  <version>1.0</version>
+  <vendor email="wxb9547@163.com" >wxb</vendor>
+
+  <description> 这是一个swagger插件，如果你使用了swagger，那么它可以用来帮助生成swagger api docx 文档</description>
+
+
+  <!-- please see https://plugins.jetbrains.com/docs/intellij/build-number-ranges.html for description -->
+  <idea-version since-build="173.0"/>
+
+  <!-- please see https://plugins.jetbrains.com/docs/intellij/plugin-compatibility.html
+       on how to target different products -->
+  <depends>com.intellij.modules.platform</depends>
+
+  <extensions defaultExtensionNs="com.intellij">
+    <!-- Add your extensions here -->
+  </extensions>
+
+  <actions>
+    <group id="MyPlugin.SampleMenu" text="XsPlugins" description="XsPlugins">
+      <add-to-group group-id="MainMenu" anchor="last"  />
+      <action id="Myplugin.swagger" class="com.wxb.plugin.action.SwaggerAction" text="SwaggerDocxGen" description="A plugin" />
+    </group>
+  </actions>
+
+  <depends>com.intellij.modules.platform</depends>
+  <depends>com.intellij.modules.lang</depends>
+  <depends>com.intellij.modules.java</depends>
+
+</idea-plugin>
