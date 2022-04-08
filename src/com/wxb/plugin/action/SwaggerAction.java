@@ -12,6 +12,7 @@ import com.intellij.psi.impl.source.PsiClassReferenceType;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 public class SwaggerAction extends AnAction {
     static String java_source = "src/main/java";
@@ -60,11 +61,14 @@ public class SwaggerAction extends AnAction {
                     PsiAnnotationMemberValue value = annotations[0].findAttributeValue("value");
                     System.out.println();
                     if(method.getName().contains("listPage")){
+                        // 获取方法返回类型
                         PsiType returnType = method.getReturnType();
+                        // 获取方法返回类型，与上一步获取的是同一个对象
                         PsiType deepComponentType = returnType.getDeepComponentType();
                         System.out.println();
                         if(returnType instanceof PsiClassReferenceType){
                             PsiClassReferenceType field = (PsiClassReferenceType) returnType;
+                            // 获取字段名称等，参考字段
                             String name1 = field.getName();
                             String className1 = field.getClassName();
                             String canonicalText1 = field.getCanonicalText();
@@ -72,6 +76,18 @@ public class SwaggerAction extends AnAction {
                             String presentableText = field.getPresentableText();
                             PsiClass resolve = field.resolve();
                             PsiClassType.ClassResolveResult classResolveResult = field.resolveGenerics();
+                            PsiClass element = classResolveResult.getElement();
+                            element.hasTypeParameters();
+                            PsiSubstitutor substitutor = classResolveResult.getSubstitutor();
+                            // 字段泛型里面的内容，key是泛型标识的符号比如T（PsiTypeParameter）,value(PsiType/PsiClassReferenceType)是泛型的具体内容
+                            Map<PsiTypeParameter, PsiType> substitutionMap = substitutor.getSubstitutionMap();
+//                            if(classResolveResult instanceof PsiClassReferenceType){
+
+//                                PsiClassReferenceType classResolveResult2 = (PsiClassReferenceType) classResolveResult;
+//                                PsiClass resolve2 = field.resolve();
+//                                String name2 = field.getName();
+//                                String className2 = field.getClassName();
+//                            }
                             String className = field.getClassName();
                             String canonicalText = field.getCanonicalText();
                             System.out.println();
@@ -81,11 +97,15 @@ public class SwaggerAction extends AnAction {
             }
             if (name.contains("SaveTacticRequest")) {
                 System.out.println();
+                // 获取字段
                 PsiField[] fields = aClass.getFields();
+                // 获取字段名称
                 String text = fields[1].getText();
+                // 获取字段类型
                 PsiType type1 = fields[1].getType();
                 if(type1 instanceof PsiClassReferenceType){
                     PsiClassReferenceType field = (PsiClassReferenceType) type1;
+                    // 解析字段类型属于的类
                     PsiClass resolve = field.resolve();
                     PsiClassType.ClassResolveResult classResolveResult = field.resolveGenerics();
                     String className = field.getClassName();
