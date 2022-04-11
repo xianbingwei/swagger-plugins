@@ -1,9 +1,12 @@
 package com.wxb.plugin.core.gen;
 
 import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
 import com.alibaba.fastjson.serializer.SerializerFeature;
-import com.wxb.plugin.core.FileUtils;
+import com.intellij.psi.*;
+import com.intellij.psi.impl.ElementBase;
+import com.intellij.psi.impl.source.PsiClassReferenceType;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiModel;
 import io.swagger.annotations.ApiModelProperty;
@@ -14,7 +17,10 @@ import org.springframework.web.bind.annotation.*;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.lang.reflect.*;
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
+import java.lang.reflect.TypeVariable;
+import java.lang.reflect.WildcardType;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -55,65 +61,42 @@ public class InterfaceApiGen2 {
 //        excludeClass.addAll(Arrays.asList());
     }
 
-    public static void scanFile(File file, List<File> files) {
-        if (file.isDirectory()) {
-            for (File listFile : Objects.requireNonNull(file.listFiles())) {
-                if(file.getName().equals("test")){
-                    continue;
+    public static void getPsiClass(PsiElement children, List<PsiJavaFile> psiClassList) {
+        if (children instanceof PsiJavaFile) {
+            psiClassList.add((PsiJavaFile) children);
+        } else if (children instanceof PsiDirectory) {
+            PsiElement[] elements = children.getChildren();
+            if (elements != null && elements.length > 1) {
+                for (PsiElement child : elements) {
+                    getPsiClass(child, psiClassList);
                 }
-                scanFile(listFile, files);
             }
-        } else if (file.getName().endsWith(".java")){
-            System.out.println(file.getName());
-            files.add(file);
         }
-    }
-
-    public static void main(String[] args) {
-
-        System.out.println("this is main");
-        System.out.println("scan: "+args[0]);
-        if (args.length > 1 && StringUtil.isNotBlank(args[1])) {
-            System.out.println("out: "+args[1]);
-            out = args[1];
-        }
-        genFile(args[0]);
-    }
-
-    public static void run(String scan, String outPath) {
-        System.out.println("this is run");
-        System.out.println("scan: "+scan);
-        System.out.println("out: "+outPath);
-        if (StringUtil.isNotBlank(outPath)) {
-            out = outPath;
-        }
-        genFile(scan);
 
     }
 
-    public static void genFile(String scan) {
-        List<File> files = new ArrayList<>();
-        scanFile(new File(scan), files);
+    public static void genFile(PsiElement data) {
+        List<PsiJavaFile> files = new ArrayList<>();
+        getPsiClass(data, files);
         List<MethodApiInfo> methods = new ArrayList<>();
-        for (File file : files) {
-            String replace = FileUtils.readPackage(file);
-            System.out.println(replace);
-            Class<?> aClass;
+        for (PsiJavaFile file : files) {
+            PsiClass aClass;
             try {
-                aClass = Thread.currentThread().getContextClassLoader().loadClass(replace);
-            } catch (ClassNotFoundException e) {
-                System.out.println("NOT FOUND: " + replace);
+                PsiClass[] classes = file.getClasses();
+                String name = file.getName();
+                aClass = classes[0];
+            } catch (Exception e) {
+                System.out.println("NOT CLASS: " + file.getName());
                 continue;
             }
-            RequestMapping annotation = aClass.getAnnotation(RequestMapping.class);
-            if (aClass.getAnnotation(RestController.class) == null) {
-                System.out.println(file.getPath());
+            if (!isController(aClass)) {
+                System.out.println("not controller:" + file.getName());
                 continue;
             }
-            String note = getNote(aClass.getAnnotation(Api.class));
-            String prefixPath = getPath(annotation);
+            String note = getNote(aClass.getAnnotation(Api.class.getName()));
+            String prefixPath = getPath(aClass.getAnnotation(RequestMapping.class.getName()));
             System.out.println(prefixPath);
-            for (Method method : aClass.getDeclaredMethods()) {
+            for (PsiMethod method : aClass.getMethods()) {
                 String mapping = getMapping(method);
                 if (mapping == null) {
                     continue;
@@ -124,64 +107,71 @@ public class InterfaceApiGen2 {
         toFile(methods);
     }
 
+    public static final String controller = "org.springframework.stereotype.Controller";
+    public static final String restController = "org.springframework.web.bind.annotation.RestController";
+
+    public static boolean isController(PsiClass aClass) {
+        PsiAnnotation[] annotations = aClass.getAnnotations();
+        if (annotations != null) {
+            for (PsiAnnotation annotation : annotations) {
+                if (restController.equals(annotation.getQualifiedName())
+                        || controller.equals(annotation.getQualifiedName())) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     /**
      * 解析方法参数类型，返回参数类型
      */
-    public static MethodApiInfo getInfo(Method method, String prefixPath, String notePref) {
+    public static MethodApiInfo getInfo(PsiMethod method, String prefixPath, String notePref) {
 
         MethodApiInfo methodApiInfo = new MethodApiInfo();
         String path = getMapping(method);
         methodApiInfo.url = prefixPath + path;
         System.out.println("url: " + methodApiInfo.url);
-        methodApiInfo.businessDesc = getNote(method.getAnnotation(ApiOperation.class));
+        methodApiInfo.businessDesc = getNote(method.getAnnotation(ApiOperation.class.getName()));
         methodApiInfo.title = notePref + "-" + methodApiInfo.businessDesc;
         methodApiInfo.paramEntities = new ArrayList<>();
-        JSONObject req = new JSONObject();
+        JSONArray req = new JSONArray();
         List<Class<?>> sub = new ArrayList<>();
-        for (Class<?> parameterType : method.getParameterTypes()) {
-            if (parameterType.getAnnotation(ApiModel.class) == null) {
+        // 解析方法参数
+        for (PsiParameter parameterType : method.getParameterList().getParameters()) {
+            PsiClassReferenceType type = (PsiClassReferenceType) parameterType.getType();
+
+            if (type.resolve().getAnnotation(ApiModel.class.getName()) == null) {
                 continue;
             }
-            req = JSON.parseObject(formatContent(parameterType));
-            getEntityInfo(parameterType, methodApiInfo.paramEntities, req);
-//            methodApiInfo.paramEntities.add(getEntityInfo(parameterType, sub, req));
+
+            JSONObject object = new JSONObject();
+            req.add(object);
+
+            getEntityInfo(type, methodApiInfo.paramEntities, object);
             methodApiInfo.requestExample = formatContent(parameterType);
         }
-//        for (Class<?> parameterType : sub) {
-//            if (parameterType.getAnnotation(ApiModel.class) == null) {
-//                continue;
-//            }
-//            methodApiInfo.paramEntities.add(getEntityInfo(parameterType, sub, req));
-//        }
+        // 解析返回类型
         JSONObject res = JSON.parseObject(formatContent(method.getReturnType()));
         methodApiInfo.returnEntities = getReturnInfo(method, res);
 
-        methodApiInfo.requestExample = formatContent(req);
-        methodApiInfo.responseExample = formatContent(res);
+        //设置样例
+        methodApiInfo.requestExample = req.toJSONString();
+        methodApiInfo.responseExample = res.toJSONString();
         return methodApiInfo;
     }
 
-    public static List<MethodApiInfo.EntityInfo> getReturnInfo(Method method, JSONObject res) {
+    public static List<MethodApiInfo.EntityInfo> getReturnInfo(PsiMethod method, JSONObject res) {
         List<MethodApiInfo.EntityInfo> returnEntities = new ArrayList<>();
         List<Class<?>> sub = new ArrayList<>();
-        if (method.getReturnType().getAnnotation(ApiModel.class) == null) {
+        PsiClassReferenceType returnType = (PsiClassReferenceType) method.getReturnType();
+        PsiClass resolve = returnType.resolve();
+        if (resolve == null || resolve.getAnnotation(ApiModel.class.getName()) == null) {
             return null;
         }
-        Type genericReturnType = method.getGenericReturnType();
 
-        Class<?> superclass = method.getReturnType().getSuperclass();
-        Type genericSuperclass = superclass.getGenericSuperclass();
-        getEntityInfo(method.getReturnType(), returnEntities, res,
-                !BaseDataResponse.class.isAssignableFrom(superclass) ? genericReturnType : genericSuperclass);
-//        returnEntities.add(getEntityInfo(method.getReturnType(), sub, res, genericSuperclass == null ? genericReturnType : genericSuperclass));
+        getEntityInfo(returnType, returnEntities, res);
 
-//        for (int i = 0; i < sub.size(); i++) {
-//            Class<?> parameterType = sub.get(i);
-//            if (parameterType.getAnnotation(ApiModel.class) == null) {
-//                continue;
-//            }
-//            returnEntities.add(getEntityInfo(parameterType, sub, res));
-//        }
         return returnEntities;
     }
 
@@ -207,57 +197,46 @@ public class InterfaceApiGen2 {
         );
     }
 
-    public static void getEntityInfo(Class<?> clazz, List<MethodApiInfo.EntityInfo> sub, JSONObject json) {
-        getEntityInfo(clazz, sub, json, null);
-    }
-
-    public static void getEntityInfo(Class<?> clazz, List<MethodApiInfo.EntityInfo> sub, JSONObject json, Type genericReturnType) {
-
-        if (clazz.getAnnotation(ApiModel.class) == null) {
+    public static void getEntityInfo(PsiClassReferenceType type, List<MethodApiInfo.EntityInfo> sub, JSONObject json) {
+        PsiClass resolve = type.resolve();
+        if (resolve.getAnnotation(ApiModel.class.getName()) == null) {
             return;
         }
         MethodApiInfo.EntityInfo entityInfo = new MethodApiInfo.EntityInfo();
-        ApiModel annotation = clazz.getAnnotation(ApiModel.class);
-        entityInfo.nameEn = clazz.getSimpleName();
-        entityInfo.nameCn = getEntityDesc(annotation);
+        entityInfo.entityClass = resolve.getQualifiedName();
+        entityInfo.nameEn = resolve.getName();
+        entityInfo.nameCn = getEntityDesc(resolve.getAnnotation(ApiModel.class.getName()));
         entityInfo.fieldInfos = new ArrayList<>();
-        List<Field> fields = new ArrayList<>();
-        getAllFields(fields, clazz);
-        for (Field field : fields) {
-            if (field.getAnnotation(ApiModelProperty.class) == null
-                    || field.getAnnotation(ApiModelProperty.class).hidden()
+        List<PsiField> fields = new ArrayList<>();
+        getAllFields(fields, resolve);
+        for (PsiField field : fields) {
+            if (field.getAnnotation(ApiModelProperty.class.getName()) == null
+                    || "true".equals(field.getAnnotation(ApiModelProperty.class.getName()).findAttributeValue("hidden"))
                     || excludeFields.contains(field.getName())) {
                 continue;
             }
-            entityInfo.fieldInfos.add(getFieldInfo(entityInfo, field, sub, json, genericReturnType));
+            entityInfo.fieldInfos.add(getFieldInfo(entityInfo, field, sub, json));
         }
         sub.add(entityInfo);
     }
 
-    public static String getEntityDesc(ApiModel annotation) {
-        String nameCn = StringUtil.isBlank(annotation.value()) ? annotation.description() : annotation.value();
-        return nameCn.replaceAll("DTO", "")
-                .replaceAll("VO", "");
-    }
-
-    public static void getAllFields(List<Field> fields, Class<?> clazz) {
-        if (clazz == null) {
+    public static void getAllFields(List<PsiField> fields, PsiClass resolve) {
+        if (resolve == null) {
             return;
         }
-        fields.addAll(Arrays.asList(clazz.getDeclaredFields()));
-        getAllFields(fields, clazz.getSuperclass());
+        fields.addAll(Arrays.asList(resolve.getAllFields()));
     }
 
-    public static MethodApiInfo.FieldInfo getFieldInfo(MethodApiInfo.EntityInfo entityInfo, Field field,
-                                                       List<MethodApiInfo.EntityInfo> sub, JSONObject json, Type genericReturnType) {
+    public static MethodApiInfo.FieldInfo getFieldInfo(MethodApiInfo.EntityInfo entityInfo, PsiField field,
+                                                       List<MethodApiInfo.EntityInfo> sub, JSONObject json) {
         MethodApiInfo.FieldInfo fieldInfo = new MethodApiInfo.FieldInfo();
-        ApiModelProperty annotation = field.getAnnotation(ApiModelProperty.class);
+        PsiAnnotation annotation = field.getAnnotation(ApiModelProperty.class.getName());
         fieldInfo.nameEn = field.getName();
         fieldInfo.serial = entityInfo.serial++;
-        fieldInfo.information = annotation.value();
-        fieldInfo.isNecessary = annotation.required();
-        fieldInfo.type = getType(field, sub, json, genericReturnType);
-        fieldInfo.nameCn = getSubString(annotation.value());
+        fieldInfo.information = getText(annotation, "value");
+        fieldInfo.isNecessary = Boolean.valueOf(getText(annotation, "required"));
+        fieldInfo.type = getType(field, sub, json);
+        fieldInfo.nameCn = getSubString(getText(annotation, "value"));
         return fieldInfo;
     }
 
@@ -273,51 +252,45 @@ public class InterfaceApiGen2 {
         return args;
     }
 
-    public static String getType(Field field, List<MethodApiInfo.EntityInfo> sub, JSONObject jsonObject, Type genericReturnType) {
-        Class<?> type = field.getType();
-        Class<?> declaringClass = field.getDeclaringClass();
+    public static Map<PsiTypeParameter, PsiType> getGenericType(PsiClassReferenceType type) {
+        PsiClassType.ClassResolveResult classResolveResult = type.resolveGenerics();
+        PsiClass element = classResolveResult.getElement();
+        element.hasTypeParameters();
+        return classResolveResult.getSubstitutor().getSubstitutionMap();
+    }
 
-        if ("data".equals(field.getName()) && BaseResponse.class.isAssignableFrom(declaringClass)) {
+    public static String getType(PsiField field, List<MethodApiInfo.EntityInfo> sub, JSONObject jsonObject) {
+        PsiClassReferenceType type = (PsiClassReferenceType) field.getType();
+        String qualifiedName = type.resolve().getQualifiedName();
 
-            try {
-                jsonObject.put(field.getName(), type.newInstance());
-            } catch (InstantiationException | IllegalAccessException e) {
-                e.printStackTrace();
-            }
-            String s = dealWithGeneric(genericReturnType, declaringClass.getName(), jsonObject, sub);
-            return s.startsWith("<") ? s.substring(1, s.length() - 1) : s;
+        if (type.resolve().getAnnotation(ApiModel.class.getName()) != null
+                && !excludeClass.contains(type.getName())) {
+
+            JSONObject object = new JSONObject();
+            jsonObject.put(field.getName(), object);
+
+            dealWithGeneric((PsiClassReferenceType) type, object, sub);
+
+            return type.getPresentableText();
         }
-        if (type.isAssignableFrom(String.class)) {
+        // TODO 最好替换成isAssignableFrom
+        if (qualifiedName.equals(String.class.getName())) {
             return "字符型";
         }
-        if (type.isAssignableFrom(Boolean.class)) {
+        if (qualifiedName.equals(Boolean.class.getName())) {
             return "布尔型";
         }
-        if (type.isAssignableFrom(Integer.class) || type.isAssignableFrom(Long.class)) {
+        if (qualifiedName.equals(Integer.class.getName()) || qualifiedName.equals(Long.class.getName())) {
             return "数字整型";
         }
-        if (type.isAssignableFrom(Double.class) || type.isAssignableFrom(Float.class)) {
+        if (qualifiedName.equals(Double.class.getName()) || qualifiedName.equals(Float.class.getName())) {
             return "浮点型";
         }
-        if (type.isAssignableFrom(Date.class)) {
+        if (qualifiedName.equals(Date.class.getName())) {
             return "日期型";
         }
-        if (type.getAnnotation(ApiModel.class) != null
-                && !excludeClass.contains(type.getSimpleName())) {
-            try {
-                jsonObject.put(field.getName(), type.newInstance());
-            } catch (InstantiationException | IllegalAccessException e) {
-                e.printStackTrace();
-            }
-            getEntityInfo(type, sub, jsonObject);
-        }
-        if ("List".equals(type.getSimpleName())
-                || "IPage".equals(type.getSimpleName())
-                || "Page".equals(type.getSimpleName()) || "Map".equals(type.getSimpleName())) {
-            Type genericType = field.getGenericType();
-            return getTypeSimpleName(genericType) + dealWithGeneric(genericType, declaringClass.getName(), jsonObject, sub);
-        }
-        return type.getSimpleName();
+        // 集合类型
+        return type.getName();
     }
 
     public static String getTypeSimpleName(Type actualType) {
@@ -329,68 +302,34 @@ public class InterfaceApiGen2 {
         return actualType.getTypeName();
     }
 
-    public static String dealWithGeneric(Type genericType, JSONObject json, List<MethodApiInfo.EntityInfo> sub) {
-        return dealWithGeneric(genericType, null, json, sub);
+    public static boolean entityExists(List<MethodApiInfo.EntityInfo> sub, String exist) {
+        for (MethodApiInfo.EntityInfo entityInfo : sub) {
+            if(Objects.equals(exist, entityInfo.entityClass)){
+                return true;
+            }
+        }
+        return false;
     }
 
-    public static String dealWithGeneric(Type genericType, String fieldClass, JSONObject json, List<MethodApiInfo.EntityInfo> sub) {
-        Type[] actualTypeArguments = null;
-        if (genericType instanceof ParameterizedType) {
-            actualTypeArguments = ((ParameterizedType) genericType).getActualTypeArguments();
-
+    public static void dealWithGeneric(PsiClassReferenceType type, JSONObject json, List<MethodApiInfo.EntityInfo> sub) {
+        if (type == null) {
+            return;
         }
-        if (actualTypeArguments == null || actualTypeArguments.length == 0) {
+        // 处理对象
+        getClassInfo(type, json, sub);
 
-            if (genericType instanceof WildcardType || genericType instanceof TypeVariable) {
-                return Object.class.getSimpleName();
-            }
-            if (genericType instanceof Class) {
-                return ((Class<?>) genericType).getSimpleName();
-            }
-            return genericType.getTypeName();
+        Map<PsiTypeParameter, PsiType> genericType = getGenericType(type);
+        if(genericType == null){
+            return;
         }
+        // 处理对象泛型
+        for (PsiType actualType : genericType.values()) {
+            if (actualType instanceof PsiClassReferenceType) {
+                PsiClassReferenceType referenceType = (PsiClassReferenceType) actualType;
 
-        StringBuilder sb = new StringBuilder();
-        sb.append("<");
-        for (Type actualType : actualTypeArguments) {
-            if (actualType instanceof ParameterizedType) {
-                String typeName = actualType.getTypeName();
-
-                Type[] arguments = ((ParameterizedType) actualType).getActualTypeArguments();
-                LinkedList<Type> list = new LinkedList<>(Arrays.asList(arguments));
-                map.put(typeName.split("<")[0], list);
-                getClassInfo(((ParameterizedType) actualType).getRawType(), json, sub);
-                sb.append(getTypeSimpleName(actualType))
-                        .append(dealWithGeneric(actualType, json, sub)).append(",");
-                map.clear();
-                continue;
+                dealWithGeneric(referenceType, new JSONObject(), sub);
             }
-            if (actualType instanceof WildcardType || actualType instanceof TypeVariable) {
-                if (StringUtil.isNotBlank(fieldClass)) {
-                    String find;
-                    if (IPage.class.getName().equals(fieldClass)) {
-                        find = "com.baomidou.mybatisplus.core.metadata.IPage";
-                    } else {
-                        find = fieldClass;
-                    }
-                    LinkedList<Type> types = map.get(find);
-                    if (types != null && types.size() > 0) {
-                        sb.append(subTypeName(types.pop().getTypeName()));
-                        continue;
-
-                    }
-
-                }
-                sb.append(Object.class.getSimpleName());
-                continue;
-            }
-
-            getClassInfo(actualType, json, sub);
-
-            sb.append(dealWithGeneric(actualType, json, sub)).append(",");
         }
-
-        return sb.substring(0, sb.length() - 1) + ">";
     }
 
 
@@ -413,67 +352,90 @@ public class InterfaceApiGen2 {
     static Pattern pattern = Pattern.compile("(?<=<).*(?=>)");
     static Map<String, LinkedList<Type>> map = new HashMap<>();
 
-    public static void getClassInfo(Type actualType, JSONObject json,
+    public static void getClassInfo(PsiClassReferenceType actualType, JSONObject json,
                                     List<MethodApiInfo.EntityInfo> sub) {
-        if (actualType instanceof Class) {
-            Class<?> actualTypeArgument = (Class<?>) actualType;
-            if (com.baomidou.mybatisplus.core.metadata.IPage.class.isAssignableFrom(actualTypeArgument)) {
-                actualTypeArgument = IPage.class;
+        PsiClass resolve = actualType.resolve();
+        if (resolve != null) {
+
+            if(entityExists(sub, resolve.getQualifiedName())){
+                return;
             }
-            if (actualTypeArgument.getAnnotation(ApiModel.class) != null
-                    && !excludeClass.contains(actualTypeArgument.getSimpleName())) {
-                getEntityInfo(actualTypeArgument, sub, json);
+
+            if (resolve.getAnnotation(ApiModel.class.getName()) != null
+                    && !excludeClass.contains(resolve.getName())) {
+                getEntityInfo(actualType, sub, json);
             }
         }
     }
 
-    public static String getNote(Api api) {
+
+    public static String getEntityDesc(PsiAnnotation api) {
         if (api == null) {
             return "";
         }
-        return StringUtil.isBlank(api.value()) ? api.tags()[0] : api.value();
+        PsiAnnotationMemberValue value = api.findAttributeValue("value") == null ?
+                api.findAttributeValue("description") : api.findAttributeValue("value");
+        if (value == null || value.getText() == null) {
+            return "";
+        }
+        return value.getText();
     }
 
-    public static String getNote(ApiOperation api) {
+    public static String getNote(PsiAnnotation api) {
         if (api == null) {
             return "";
         }
-        return api.value() == null ? api.tags()[0] : api.value();
+        PsiAnnotationMemberValue value = api.findAttributeValue("value");
+        return value == null ? "" : value.getText();
     }
 
-    public static String getMapping(Method method) {
-        if (method.getAnnotation(PostMapping.class) != null) {
-            PostMapping annotation = method.getAnnotation(PostMapping.class);
-            return annotation.value().length > 0 ? getPath(annotation.value()) : getPath(annotation.path());
-        }
-        if (method.getAnnotation(PutMapping.class) != null) {
-            PutMapping annotation = method.getAnnotation(PutMapping.class);
-            return annotation.value().length > 0 ? getPath(annotation.value()) : getPath(annotation.path());
-        }
-        if (method.getAnnotation(GetMapping.class) != null) {
-            GetMapping annotation = method.getAnnotation(GetMapping.class);
-            return annotation.value().length > 0 ? getPath(annotation.value()) : getPath(annotation.path());
-        }
-        if (method.getAnnotation(DeleteMapping.class) != null) {
-            DeleteMapping annotation = method.getAnnotation(DeleteMapping.class);
-            return annotation.value().length > 0 ? getPath(annotation.value()) : getPath(annotation.path());
-        }
-        if (method.getAnnotation(RequestMapping.class) == null) {
+    public static String getText(PsiAnnotation api, String attribute) {
+        if (api == null) {
             return null;
         }
-        return getPath(method.getAnnotation(RequestMapping.class));
+        PsiAnnotationMemberValue value = api.findAttributeValue(attribute);
+        return value == null ? "" : value.getText();
     }
 
-    public static String getPath(RequestMapping annotation) {
+    public static String getTag(PsiAnnotation api) {
+        if (api == null) {
+            return "";
+        }
+        PsiAnnotationMemberValue value = api.findAttributeValue("tags");
+        return value == null ? "" : value.getText();
+    }
+
+    public static String getMapping(PsiMethod method) {
+        PsiAnnotation annotation;
+        if (method.getAnnotation(PostMapping.class.getName()) != null) {
+            annotation = method.getAnnotation(PostMapping.class.getName());
+        } else if (method.getAnnotation(PutMapping.class.getName()) != null) {
+            annotation = method.getAnnotation(PutMapping.class.getName());
+        } else if (method.getAnnotation(GetMapping.class.getName()) != null) {
+            annotation = method.getAnnotation(GetMapping.class.getName());
+        } else if (method.getAnnotation(DeleteMapping.class.getName()) != null) {
+            annotation = method.getAnnotation(DeleteMapping.class.getName());
+        } else if (method.getAnnotation(RequestMapping.class.getName()) != null) {
+            annotation = method.getAnnotation(RequestMapping.class.getName());
+        } else {
+            annotation = null;
+        }
+        return annotation == null ? null : formatPath(getPath(annotation));
+    }
+
+    public static String getPath(PsiAnnotation annotation) {
         if (annotation == null) {
             return "";
         }
-        return annotation.value().length > 0 ? getPath(annotation.value()) : getPath(annotation.path());
+
+        PsiAnnotationMemberValue path = annotation.findAttributeValue("path") == null ?
+                annotation.findAttributeValue("value") : annotation.findAttributeValue("path");
+        path = path == null ? annotation.findAttributeValue("name") : path;
+        return path == null ? "" : path.getText();
     }
 
-    public static String getPath(String[] value) {
-        if (value.length > 0) {
-            String s = value[0];
+    public static String formatPath(String s) {
+        if (s != null) {
             if (!s.startsWith("/")) {
                 s = "/" + s;
             }
@@ -482,7 +444,7 @@ public class InterfaceApiGen2 {
             }
             return s;
         }
-        return "";
+        return s;
     }
 
     public static void toFile(List<MethodApiInfo> methods) {
@@ -491,7 +453,7 @@ public class InterfaceApiGen2 {
             XWPFDocument document = new XWPFDocument(InterfaceApiGen2.class.getClassLoader().getResourceAsStream(template));
 //            XWPFDocument document = new XWPFDocument(POIXMLDocument.openPackage(template));
             int size = document.getParagraphs().size();
-            System.out.println("docx file size:"+ size);
+            System.out.println("docx file size:" + size);
             //解析样式
             templateStyle = parseTemplate(document);
             //填充内容
@@ -506,7 +468,7 @@ public class InterfaceApiGen2 {
             FileOutputStream stream = new FileOutputStream(file);
             document.write(stream);
             stream.close();
-            System.out.println("file name :"+file.getName());
+            System.out.println("file name :" + file.getName());
             System.out.println("generator file success！");
         } catch (IOException e) {
             e.printStackTrace();

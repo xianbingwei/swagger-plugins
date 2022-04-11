@@ -14,13 +14,15 @@ public class MethodApiInfo {
     String url;
     String title;
     String businessDesc;
-    String interfaceProvide = "小硕数科";
+    String tags;
+    String interfaceProvide ;
     String requestExample;
     String responseExample;
     List<EntityInfo> paramEntities;
     List<EntityInfo> returnEntities;
 
     static class EntityInfo {
+        String entityClass;
         int serial = 1;
         String nameCn;
         String nameEn;

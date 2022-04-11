@@ -1,6 +1,7 @@
 package com.wxb.plugin.action;
 
 import com.intellij.lang.ASTNode;
+import com.intellij.lang.jvm.JvmParameter;
 import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.actionSystem.CommonDataKeys;
@@ -9,6 +10,8 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.Messages;
 import com.intellij.psi.*;
 import com.intellij.psi.impl.source.PsiClassReferenceType;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -56,11 +59,21 @@ public class SwaggerAction extends AnAction {
             if (name.contains("AlarmController")) {
                 for (PsiMethod method : aClass.getMethods()) {
                     PsiAnnotation[] annotations = method.getAnnotations();
-                    PsiAnnotation requestMapping = method.getAnnotation("PostMapping");
+                    PsiAnnotation requestMapping = method.getAnnotation(PostMapping.class.getName());
+                    PsiAnnotation requestMapping1 = method.getAnnotation(RequestMapping.class.getName());
                     String qualifiedName = annotations[0].getQualifiedName();
                     PsiAnnotationMemberValue value = annotations[0].findAttributeValue("value");
+                    String text = value.getText();
+                    PsiElement context = value.getContext();
+                    String text1 = context.getText();
                     System.out.println();
                     if(method.getName().contains("listPage")){
+                        PsiParameterList parameterList = method.getParameterList();
+                        PsiParameter[] parameters = parameterList.getParameters();
+                        PsiType type = parameters[0].getType();
+                        String name2 = parameters[0].getName();
+
+
                         // 获取方法返回类型
                         PsiType returnType = method.getReturnType();
                         // 获取方法返回类型，与上一步获取的是同一个对象
@@ -73,8 +86,14 @@ public class SwaggerAction extends AnAction {
                             String className1 = field.getClassName();
                             String canonicalText1 = field.getCanonicalText();
                             String internalCanonicalText = field.getInternalCanonicalText();
+                            // DataBaseResponse<IPage<QueryAlarmDTO>>
                             String presentableText = field.getPresentableText();
                             PsiClass resolve = field.resolve();
+                            PsiClass superClass = resolve.getSuperClass();
+                            PsiClass[] supers = resolve.getSupers();
+                            PsiClass[] interfaces = resolve.getInterfaces();
+                            PsiClass[] innerClasses = resolve.getInnerClasses();
+
                             PsiClassType.ClassResolveResult classResolveResult = field.resolveGenerics();
                             PsiClass element = classResolveResult.getElement();
                             element.hasTypeParameters();
