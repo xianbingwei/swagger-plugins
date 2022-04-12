@@ -72,7 +72,7 @@ public class InterfaceApiGen2 {
 
     }
 
-    public static void genFile(PsiElement data, String outputPath) {
+    public static String genFile(PsiElement data, String outputPath) {
         List<PsiJavaFile> files = new ArrayList<>();
         getPsiClass(data, files);
         List<MethodApiInfo> methods = new ArrayList<>();
@@ -102,7 +102,7 @@ public class InterfaceApiGen2 {
             }
         }
         out = outputPath;
-        toFile(methods);
+       return toFile(methods);
     }
 
     public static final String controller = "org.springframework.stereotype.Controller";
@@ -471,7 +471,7 @@ public class InterfaceApiGen2 {
         return s;
     }
 
-    public static void toFile(List<MethodApiInfo> methods) {
+    public static String toFile(List<MethodApiInfo> methods) {
         try {
             //获取docx解析对象
             XWPFDocument document = new XWPFDocument(InterfaceApiGen2.class.getClassLoader().getResourceAsStream(template));
@@ -494,10 +494,11 @@ public class InterfaceApiGen2 {
             stream.close();
             System.out.println("file name :" + file.getName());
             System.out.println("generator file success！");
+            return file.getPath();
         } catch (IOException e) {
             e.printStackTrace();
         }
-
+        return out;
     }
 
     public static void fillMethodApi(XWPFDocument document, MethodApiInfo api) {
