@@ -1,7 +1,9 @@
 package com.wxb.plugin.core.gen;
 
+import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
+import com.alibaba.fastjson.serializer.SerializerFeature;
 import com.intellij.psi.*;
 import com.intellij.psi.impl.source.PsiClassReferenceType;
 import io.swagger.annotations.Api;
@@ -153,8 +155,8 @@ public class InterfaceApiGen2 {
         methodApiInfo.returnEntities = getReturnInfo(method, res);
 
         //设置样例
-        methodApiInfo.requestExample = req.toJSONString();
-        methodApiInfo.responseExample = res.toJSONString();
+        methodApiInfo.requestExample = formatContent(req);
+        methodApiInfo.responseExample = formatContent(res);
         return methodApiInfo;
     }
 
@@ -181,18 +183,18 @@ public class InterfaceApiGen2 {
 //        return "{}";
 //    }
 //
-//    public static String formatContent(Object o) {
-//        return JSON.toJSONString(o,
-//                SerializerFeature.PrettyFormat,
-//                SerializerFeature.WriteNullBooleanAsFalse,
-//                SerializerFeature.WriteBigDecimalAsPlain,
-//                SerializerFeature.WriteMapNullValue,
-//                SerializerFeature.WriteNullListAsEmpty,
-//                SerializerFeature.WriteNullStringAsEmpty,
-//                SerializerFeature.WriteNullNumberAsZero,
-//                SerializerFeature.WriteDateUseDateFormat
-//        );
-//    }
+    public static String formatContent(Object o) {
+        return JSON.toJSONString(o,
+                SerializerFeature.PrettyFormat,
+                SerializerFeature.WriteNullBooleanAsFalse,
+                SerializerFeature.WriteBigDecimalAsPlain,
+                SerializerFeature.WriteMapNullValue,
+                SerializerFeature.WriteNullListAsEmpty,
+                SerializerFeature.WriteNullStringAsEmpty,
+                SerializerFeature.WriteNullNumberAsZero,
+                SerializerFeature.WriteDateUseDateFormat
+        );
+    }
 
     public static void getEntityInfo(PsiClassReferenceType type, List<MethodApiInfo.EntityInfo> sub, JSONObject json) {
         PsiClass resolve = type.resolve();
@@ -293,21 +295,25 @@ public class InterfaceApiGen2 {
             type = (PsiClassReferenceType) psiType;
         }
 
-        String qualifiedName = type.resolve().getQualifiedName();
         // TODO 最好替换成isAssignableFrom,
-        if (qualifiedName.equals(String.class.getName())) {
+        if (isAssignable(type.resolve(),String.class.getName())) {
+            jsonObject.put(field.getName(), "string");
             return "字符型";
         }
-        if (qualifiedName.equals(Boolean.class.getName())) {
+        if (isAssignable(type.resolve(),Boolean.class.getName())) {
+            jsonObject.put(field.getName(), "true");
             return "布尔型";
         }
-        if (qualifiedName.equals(Integer.class.getName()) || qualifiedName.equals(Long.class.getName())) {
+        if (isAssignable(type.resolve(),Integer.class.getName()) || isAssignable(type.resolve(),Long.class.getName())) {
+            jsonObject.put(field.getName(), "1");
             return "数字整型";
         }
-        if (qualifiedName.equals(Double.class.getName()) || qualifiedName.equals(Float.class.getName())) {
+        if (isAssignable(type.resolve(),Double.class.getName()) || isAssignable(type.resolve(),Float.class.getName())) {
+            jsonObject.put(field.getName(), "0.1");
             return "浮点型";
         }
-        if (qualifiedName.equals(Date.class.getName())) {
+        if (isAssignable(type.resolve(), Date.class.getName())) {
+            jsonObject.put(field.getName(), "1997-01-01");
             return "日期型";
         }
 
@@ -318,6 +324,21 @@ public class InterfaceApiGen2 {
         dealWithGeneric((PsiClassReferenceType) type, object, sub);
 
         return type.getPresentableText();
+    }
+
+    public static boolean isAssignable(PsiClass psiClass, String args) {
+        if (psiClass.getQualifiedName() != null && psiClass.getQualifiedName().equals(args)){
+            return true;
+        }
+        Set<PsiClass> set = new HashSet<>();
+        set.addAll(List.of(psiClass.getInterfaces()));
+        set.addAll(List.of(psiClass.getSupers()));
+        for (PsiClass aClass : set) {
+            if(isAssignable(aClass, args)){
+                return true;
+            }
+        }
+        return false;
     }
 
     public static String getTypeSimpleName(Type actualType) {

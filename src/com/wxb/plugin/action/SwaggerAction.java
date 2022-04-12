@@ -43,10 +43,6 @@ public class SwaggerAction extends AnAction {
         Messages.showMessageDialog(project,"路径:\n"+s,"文档生成成功",Messages.getInformationIcon());
 
 
-//        psiFile.getChildren();
-//
-//        InterfaceApiGen.run(project.getBasePath(), project.getBasePath());
-//        Messages.showMessageDialog(project,"generator api success","success",Messages.getInformationIcon());
     }
 
     public static void getPsiClass(PsiElement children, List<PsiJavaFile> psiClassList) {
