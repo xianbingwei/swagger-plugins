@@ -13,6 +13,7 @@ Gitee 是 OSCHINA 推出的基于 Git 的代码托管平台（同时支持 SVN�
 
 1.  [下载](http://https://gitee.com/xianbingwei/swagger-plugin/releases/api%E7%94%9F%E6%88%90%E5%B7%A5%E5%85%B71.0%E7%89%88)
 2.  安装
+![输入图片说明](image1.png)
 
 #### 使用说明
 
