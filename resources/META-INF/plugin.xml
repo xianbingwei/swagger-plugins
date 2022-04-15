@@ -4,7 +4,7 @@
   <version>1.0</version>
   <vendor email="wxb9547@163.com" >wxb</vendor>
 
-  <description> 这是一个swagger插件，如果你使用了swagger，那么它可以用来帮助生成swagger api docx 文档</description>
+  <description> 这是一个swagger插件，如果你已经使用了swagger，那么它可以用来帮助生成swagger api docx 文档</description>
 
 
   <!-- please see https://plugins.jetbrains.com/docs/intellij/build-number-ranges.html for description -->
@@ -19,7 +19,7 @@
   </extensions>
 
   <actions>
-    <group id="MyPlugin.SampleMenu" text="XsPlugins" description="XsPlugins">
+    <group id="MyPlugin.swaggerMenu" text="SwgHelpe" description="SwgHelpe">
       <add-to-group group-id="MainMenu" anchor="last"  />
       <action id="Myplugin.swagger" class="com.wxb.plugin.action.SwaggerAction" text="SwaggerDocxGen" description="A plugin" />
     </group>
