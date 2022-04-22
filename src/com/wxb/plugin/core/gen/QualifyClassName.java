@@ -16,4 +16,6 @@ public interface QualifyClassName {
 
     String controller = "org.springframework.stereotype.Controller";
     String restController = "org.springframework.web.bind.annotation.RestController";
+
+    String collection = "java.util.Collection";
 }

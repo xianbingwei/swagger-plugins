@@ -6,6 +6,7 @@ import com.alibaba.fastjson.JSONObject;
 import com.alibaba.fastjson.serializer.SerializerFeature;
 import com.intellij.psi.*;
 import com.intellij.psi.impl.source.PsiClassReferenceType;
+import com.wxb.plugin.core.RepeatCheck;
 import org.apache.poi.xwpf.usermodel.*;
 
 import java.io.File;
@@ -143,7 +144,7 @@ public class InterfaceApiGen2 {
             JSONObject object = new JSONObject();
             req.add(object);
 
-            getEntityInfo(type, methodApiInfo.paramEntities, object);
+            getEntityInfo(type, methodApiInfo.paramEntities, object, null);
         }
         // 解析返回类型
         JSONObject res = new JSONObject();
@@ -164,20 +165,11 @@ public class InterfaceApiGen2 {
             return null;
         }
 
-        getEntityInfo(returnType, returnEntities, res);
+        getEntityInfo(returnType, returnEntities, res, null);
 
         return returnEntities;
     }
 
-    //    public static String formatContent(Class<?> c) {
-//        try {
-//            return formatContent(c.newInstance());
-//        } catch (InstantiationException | IllegalAccessException e) {
-//            System.out.println(e);
-//        }
-//        return "{}";
-//    }
-//
     public static String formatContent(Object o) {
         return JSON.toJSONString(o,
                 SerializerFeature.PrettyFormat,
@@ -191,7 +183,7 @@ public class InterfaceApiGen2 {
         );
     }
 
-    public static void getEntityInfo(PsiClassReferenceType type, List<MethodApiInfo.EntityInfo> sub, JSONObject json) {
+    public static void getEntityInfo(PsiClassReferenceType type, List<MethodApiInfo.EntityInfo> sub, JSONObject json, RepeatCheck repeatCheck) {
         PsiClass resolve = type.resolve();
         if (resolve.getAnnotation(ApiModel) == null) {
             return;
@@ -213,7 +205,7 @@ public class InterfaceApiGen2 {
                     || excludeFields.contains(field.getName())) {
                 continue;
             }
-            entityInfo.fieldInfos.add(getFieldInfo(entityInfo, field, genericType, sub, json));
+            entityInfo.fieldInfos.add(getFieldInfo(entityInfo, field, genericType, sub, json, repeatCheck));
         }
         sub.add(entityInfo);
     }
@@ -227,14 +219,14 @@ public class InterfaceApiGen2 {
 
     public static MethodApiInfo.FieldInfo getFieldInfo(MethodApiInfo.EntityInfo entityInfo, PsiField field,
                                                        Map<PsiTypeParameter, PsiType> genericType,
-                                                       List<MethodApiInfo.EntityInfo> sub, JSONObject json) {
+                                                       List<MethodApiInfo.EntityInfo> sub, JSONObject json, RepeatCheck repeatCheck) {
         MethodApiInfo.FieldInfo fieldInfo = new MethodApiInfo.FieldInfo();
         PsiAnnotation annotation = field.getAnnotation(ApiModelProperty);
         fieldInfo.nameEn = field.getName();
         fieldInfo.serial = entityInfo.serial++;
         fieldInfo.information = getText(annotation, "value");
         fieldInfo.isNecessary = Boolean.valueOf(getText(annotation, "required"));
-        fieldInfo.type = getType(field, genericType, sub, json);
+        fieldInfo.type = getType(field, genericType, sub, json, repeatCheck);
         fieldInfo.nameCn = getSubString(getText(annotation, "value"));
         return fieldInfo;
     }
@@ -260,11 +252,13 @@ public class InterfaceApiGen2 {
 
     static String[] primitive = {"short", "byte", "int", "long", "boolean", "char", "float", "double"};
     static String[] primitives = {"数字整形", "数字整形", "数字整形", "数字整形", "布尔型", "字符型", "浮点型", "浮点型"};
+    static Object[] primitiveValues = {0, 0, 0, 0, false, 'c', 0.1, 0.1};
 
-    public static String getPrimitive(PsiPrimitiveType args) {
-        String name = args.getName();
+    public static String getPrimitive(PsiField field, JSONObject jsonObject) {
+        String name = ((PsiPrimitiveType) field.getType()).getName();
         for (int i = 0; i < primitive.length; i++) {
             if (primitive[i].equals(name)) {
+                jsonObject.put(field.getName(), primitiveValues[i]);
                 return primitives[i];
             }
         }
@@ -272,11 +266,11 @@ public class InterfaceApiGen2 {
     }
 
     public static String getType(PsiField field, Map<PsiTypeParameter, PsiType> genericType,
-                                 List<MethodApiInfo.EntityInfo> sub, JSONObject jsonObject) {
+                                 List<MethodApiInfo.EntityInfo> sub, JSONObject jsonObject, RepeatCheck repeatCheck) {
         System.out.println(field.getName());
         // 处理原始数据类型
         if (field.getType() instanceof PsiPrimitiveType) {
-            return getPrimitive((PsiPrimitiveType) field.getType());
+            return getPrimitive(field, jsonObject);
         }
         PsiClassReferenceType type = (PsiClassReferenceType) field.getType();
 
@@ -289,22 +283,21 @@ public class InterfaceApiGen2 {
             }
             type = (PsiClassReferenceType) psiType;
         }
-
-        // TODO 最好替换成isAssignableFrom,
+        // 处理通用对象
         if (isAssignable(type.resolve(), String.class.getName())) {
             jsonObject.put(field.getName(), "string");
             return "字符型";
         }
         if (isAssignable(type.resolve(), Boolean.class.getName())) {
-            jsonObject.put(field.getName(), "true");
+            jsonObject.put(field.getName(), true);
             return "布尔型";
         }
         if (isAssignable(type.resolve(), Integer.class.getName()) || isAssignable(type.resolve(), Long.class.getName())) {
-            jsonObject.put(field.getName(), "1");
+            jsonObject.put(field.getName(), 1);
             return "数字整型";
         }
         if (isAssignable(type.resolve(), Double.class.getName()) || isAssignable(type.resolve(), Float.class.getName())) {
-            jsonObject.put(field.getName(), "0.1");
+            jsonObject.put(field.getName(), 0.1);
             return "浮点型";
         }
         if (isAssignable(type.resolve(), Date.class.getName())) {
@@ -313,10 +306,7 @@ public class InterfaceApiGen2 {
         }
 
         // 对象,json考虑循环引用
-        JSONObject object = new JSONObject();
-        jsonObject.put(field.getName(), object);
-
-        dealWithGeneric((PsiClassReferenceType) type, object, sub);
+        jsonObject.put(field.getName(), dealWithGeneric((PsiClassReferenceType) type, sub, repeatCheck));
 
         return type.getPresentableText();
     }
@@ -354,41 +344,75 @@ public class InterfaceApiGen2 {
         return false;
     }
 
-    public static void dealWithGeneric(PsiClassReferenceType type, JSONObject json, List<MethodApiInfo.EntityInfo> sub) {
+    public static Object dealWithGeneric(PsiClassReferenceType type, List<MethodApiInfo.EntityInfo> sub, RepeatCheck repeatCheck) {
         if (type == null) {
-            return;
+            return null;
         }
+        // 循环检测
+        RepeatCheck check = new RepeatCheck(type, repeatCheck);
+        if (check.isCycle()) {
+            return "...";
+        }
+
         // 处理对象
-        getClassInfo(type, json, sub);
-
-        Map<PsiTypeParameter, PsiType> genericType = getGenericType(type);
-        if (genericType == null) {
-            return;
+        if (!isAssignable(type.resolve(), collection)) {
+            JSONObject jsonObject = new JSONObject();
+            getClassInfo(type, jsonObject, sub, repeatCheck);
+            return jsonObject;
         }
-        // 处理对象泛型
-        for (PsiType actualType : genericType.values()) {
-            if (actualType instanceof PsiClassReferenceType) {
-                PsiClassReferenceType referenceType = (PsiClassReferenceType) actualType;
-
-                dealWithGeneric(referenceType, new JSONObject(), sub);
+        // 处理集合
+        else {
+            JSONArray array = new JSONArray();
+            Map<PsiTypeParameter, PsiType> genericType = getGenericType(type);
+            if (genericType == null) {
+                return array;
             }
+            // 处理泛型
+            for (PsiType actualType : genericType.values()) {
+                if (actualType instanceof PsiClassReferenceType) {
+                    PsiClassReferenceType referenceType = (PsiClassReferenceType) actualType;
+
+                    array.add(dealWithGeneric(referenceType, sub, check));
+                }
+            }
+            return array;
         }
     }
 
     public static void getClassInfo(PsiClassReferenceType actualType, JSONObject json,
-                                    List<MethodApiInfo.EntityInfo> sub) {
+                                    List<MethodApiInfo.EntityInfo> sub, RepeatCheck repeatCheck) {
         PsiClass resolve = actualType.resolve();
         if (resolve != null) {
+            // 防止循环迭代
 
-            if (entityExists(sub, resolve.getQualifiedName())) {
-                return;
-            }
-
+            // 只解析apiModel注解的对象
             if (resolve.getAnnotation(ApiModel) != null
-                    && !excludeClass.contains(resolve.getName())) {
-                getEntityInfo(actualType, sub, json);
+                    && !excludeClass.contains(resolve.getName())
+                    && !entityExists(sub, resolve.getQualifiedName())) {
+                getEntityInfo(actualType, sub, json, repeatCheck);
+            }
+            // 如果字段里面有集合 继续迭代解析
+            List<PsiField> fields = new ArrayList<>();
+            getAllFields(fields, resolve);
+            if (fieldContainsCollection(fields)) {
+                for (PsiField field : fields) {
+                    getType(field, getGenericType(actualType), sub, json, repeatCheck);
+                }
             }
         }
+    }
+
+    public static boolean fieldContainsCollection(List<PsiField> fields) {
+        for (PsiField field : fields) {
+            if (field.getType() instanceof PsiClassReferenceType) {
+                PsiClassReferenceType referenceType = (PsiClassReferenceType) field.getType();
+                PsiClass psiClass = referenceType.resolve();
+                if (psiClass != null && isAssignable(psiClass, collection)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
 
