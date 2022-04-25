@@ -19,9 +19,9 @@
   </extensions>
 
   <actions>
-    <group id="MyPlugin.swaggerMenu" text="SwgHelpe" description="SwgHelpe">
+    <group id="MyPlugin.swaggerMenu" text="SwgHelper" description="SwgHelper">
       <add-to-group group-id="MainMenu" anchor="last"  />
-      <action id="Myplugin.swagger" class="com.wxb.plugin.action.SwaggerAction" text="SwaggerDocxGen" description="A plugin" />
+      <action id="MyPlugin.swagger" class="com.wxb.plugin.action.SwaggerAction" text="SwaggerDocxGen" description="A Swg plugin" />
     </group>
   </actions>
 
