@@ -7,6 +7,8 @@ import com.alibaba.fastjson.serializer.SerializerFeature;
 import com.intellij.psi.*;
 import com.intellij.psi.impl.source.PsiClassReferenceType;
 import com.wxb.plugin.core.RepeatCheck;
+import org.apache.commons.httpclient.util.DateUtil;
+import org.apache.commons.lang3.time.DateUtils;
 import org.apache.poi.xwpf.usermodel.*;
 
 import java.io.File;
@@ -14,6 +16,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
+import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -528,7 +531,7 @@ public class InterfaceApiGen2 {
             for (int i = 0; i <= size; i++) {
                 document.removeBodyElement(0);
             }
-            File file = new File(out + docxPrefix + System.currentTimeMillis() + ".docx");
+            File file = new File(out + docxPrefix + getTimeStamp() + ".docx");
             FileOutputStream stream = new FileOutputStream(file);
             document.write(stream);
             stream.close();
@@ -539,6 +542,12 @@ public class InterfaceApiGen2 {
             e.printStackTrace();
         }
         return out;
+    }
+
+    public static String getTimeStamp() {
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyyMMdd-HH-mm-ss");
+        Date date = new Date();
+        return sdf.format(date);
     }
 
     public static void fillMethodApi(XWPFDocument document, MethodApiInfo api) {
