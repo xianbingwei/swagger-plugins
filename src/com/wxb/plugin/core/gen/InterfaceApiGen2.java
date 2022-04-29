@@ -7,8 +7,6 @@ import com.alibaba.fastjson.serializer.SerializerFeature;
 import com.intellij.psi.*;
 import com.intellij.psi.impl.source.PsiClassReferenceType;
 import com.wxb.plugin.core.RepeatCheck;
-import org.apache.commons.httpclient.util.DateUtil;
-import org.apache.commons.lang3.time.DateUtils;
 import org.apache.poi.xwpf.usermodel.*;
 
 import java.io.File;
@@ -162,10 +160,13 @@ public class InterfaceApiGen2 {
     public static List<MethodApiInfo.EntityInfo> getReturnInfo(PsiMethod method, JSONObject res) {
         List<MethodApiInfo.EntityInfo> returnEntities = new ArrayList<>();
         List<Class<?>> sub = new ArrayList<>();
-        PsiClassReferenceType returnType = (PsiClassReferenceType) method.getReturnType();
-        PsiClass resolve = returnType.resolve();
-        if (resolve == null || resolve.getAnnotation(ApiModel) == null) {
-            return null;
+        PsiType returnType = method.getReturnType();
+        if (returnType instanceof PsiClassReferenceType) {
+            PsiClassReferenceType type = (PsiClassReferenceType) returnType;
+            PsiClass resolve = type.resolve();
+            if (resolve == null || resolve.getAnnotation(ApiModel) == null) {
+                return null;
+            }
         }
 
         getEntityInfo(returnType, returnEntities, res, null);
@@ -186,31 +187,35 @@ public class InterfaceApiGen2 {
         );
     }
 
-    public static void getEntityInfo(PsiClassReferenceType type, List<MethodApiInfo.EntityInfo> sub, JSONObject json, RepeatCheck repeatCheck) {
-        PsiClass resolve = type.resolve();
-        if (resolve.getAnnotation(ApiModel) == null) {
-            return;
-        }
-        MethodApiInfo.EntityInfo entityInfo = new MethodApiInfo.EntityInfo();
-        entityInfo.entityClass = resolve.getQualifiedName();
-        entityInfo.nameEn = resolve.getName();
-        entityInfo.nameCn = getEntityDesc(resolve.getAnnotation(ApiModel));
-        entityInfo.fieldInfos = new ArrayList<>();
-        List<PsiField> fields = new ArrayList<>();
-        // 获取所有字段
-        getAllFields(fields, resolve);
-        // 获取泛型
-        Map<PsiTypeParameter, PsiType> genericType = getGenericType(type);
-        // 遍历
-        for (PsiField field : fields) {
-            if (field.getAnnotation(ApiModelProperty) == null
-                    || "true".equals(field.getAnnotation(ApiModelProperty).findAttributeValue("hidden"))
-                    || excludeFields.contains(field.getName())) {
-                continue;
+    public static void getEntityInfo(PsiType type, List<MethodApiInfo.EntityInfo> sub, JSONObject json, RepeatCheck repeatCheck) {
+
+        if (type instanceof PsiClassReferenceType) {
+            PsiClassReferenceType types = (PsiClassReferenceType) type;
+            PsiClass resolve = types.resolve();
+            if (resolve.getAnnotation(ApiModel) == null) {
+                return;
             }
-            entityInfo.fieldInfos.add(getFieldInfo(entityInfo, field, genericType, sub, json, repeatCheck));
+            MethodApiInfo.EntityInfo entityInfo = new MethodApiInfo.EntityInfo();
+            entityInfo.entityClass = resolve.getQualifiedName();
+            entityInfo.nameEn = resolve.getName();
+            entityInfo.nameCn = getEntityDesc(resolve.getAnnotation(ApiModel));
+            entityInfo.fieldInfos = new ArrayList<>();
+            List<PsiField> fields = new ArrayList<>();
+            // 获取所有字段
+            getAllFields(fields, resolve);
+            // 获取泛型
+            Map<PsiTypeParameter, PsiType> genericType = getGenericType(types);
+            // 遍历
+            for (PsiField field : fields) {
+                if (field.getAnnotation(ApiModelProperty) == null
+                        || "true".equals(field.getAnnotation(ApiModelProperty).findAttributeValue("hidden"))
+                        || excludeFields.contains(field.getName())) {
+                    continue;
+                }
+                entityInfo.fieldInfos.add(getFieldInfo(entityInfo, field, genericType, sub, json, repeatCheck));
+            }
+            sub.add(entityInfo);
         }
-        sub.add(entityInfo);
     }
 
     public static void getAllFields(List<PsiField> fields, PsiClass resolve) {
@@ -280,7 +285,7 @@ public class InterfaceApiGen2 {
         // 处理泛型
         if (type.resolve() instanceof PsiTypeParameter) {
             PsiType psiType = genericType.get((PsiTypeParameter) type.resolve());
-            if (psiType == null) {
+            if (psiType == null || psiType instanceof PsiWildcardType) {
                 jsonObject.put(field.getName(), "object");
                 return "Object";
             }
