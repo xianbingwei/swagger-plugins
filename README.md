@@ -12,7 +12,7 @@
 1.  [下载](http://https://gitee.com/xianbingwei/swagger-plugin/releases/api%E7%94%9F%E6%88%90%E5%B7%A5%E5%85%B71.0%E7%89%88)
 2.  安装
 ![输入图片说明](image1.png)
-
+3. 重启idea
 #### 使用说明
 
 1.  选中你需要生成api docx的目录
