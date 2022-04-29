@@ -28,6 +28,7 @@ public class SwaggerAction extends AnAction {
     @Override
     public void actionPerformed(AnActionEvent event) {
         Project project = event.getProject();
+        String name = project.getName();
         if (project == null) {
             return;
         }
@@ -35,7 +36,7 @@ public class SwaggerAction extends AnAction {
         List<PsiJavaFile> psiClassList = new ArrayList<>();
         getPsiClass(data, psiClassList);
         String basePath = project.getBasePath();
-        String s = InterfaceApiGen2.genFile(data, project.getBasePath() + "/");
+        String s = InterfaceApiGen2.genFile(data, project.getBasePath() + "/", project.getName());
 
         PsiFile po = PsiManager.getInstance(project).findFile(project.getProjectFile());
         Messages.showMessageDialog(project,"路径:\n"+s,"文档生成成功",Messages.getInformationIcon());

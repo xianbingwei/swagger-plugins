@@ -18,6 +18,7 @@ import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import static com.wxb.plugin.core.gen.QualifyClassName.*;
 
@@ -73,7 +74,10 @@ public class InterfaceApiGen2 {
 
     }
 
-    public static String genFile(PsiElement data, String outputPath) {
+    public static String genFile(PsiElement data, String outputPath, String filePre) {
+        if (StringUtil.isNotBlank(filePre)) {
+            docxPrefix = filePre;
+        }
         List<PsiJavaFile> files = new ArrayList<>();
         getPsiClass(data, files);
         List<MethodApiInfo> methods = new ArrayList<>();
@@ -204,7 +208,7 @@ public class InterfaceApiGen2 {
             // 获取所有字段
             getAllFields(fields, resolve);
             // 获取泛型
-            Map<PsiTypeParameter, PsiType> genericType = getGenericType(types);
+            Map<String, PsiType> genericType = getGenericType(types);
             // 遍历
             for (PsiField field : fields) {
                 if (field.getAnnotation(ApiModelProperty) == null
@@ -218,6 +222,54 @@ public class InterfaceApiGen2 {
         }
     }
 
+    public static void getPageInfo(PsiType type, List<MethodApiInfo.EntityInfo> sub, JSONObject json, RepeatCheck repeatCheck) {
+
+        if (type instanceof PsiClassReferenceType) {
+
+            PsiClassReferenceType types = (PsiClassReferenceType) type;
+            PsiClass resolve = types.resolve();
+
+            MethodApiInfo.EntityInfo entityInfo = new MethodApiInfo.EntityInfo();
+            entityInfo.entityClass = resolve.getQualifiedName();
+            entityInfo.nameEn = "IPage";
+            entityInfo.nameCn = "分页信息";
+            entityInfo.fieldInfos = new ArrayList<>();
+            List<PsiField> fields = new ArrayList<>();
+            // 获取所有字段
+            getAllFields(fields, resolve);
+            // 获取泛型
+            Map<String, PsiType> genericType = getGenericType(types);
+            // 遍历
+            for (PsiMethod allMethod : resolve.getAllMethods()) {
+                String trim = getTrim(allMethod.getName());
+                PsiType returnType = allMethod.getReturnType();
+                if (returnType != null && StringUtil.pageInfo.containsKey(trim)) {
+                    MethodApiInfo.FieldInfo fieldInfo = new MethodApiInfo.FieldInfo();
+                    fieldInfo.nameEn = trim;
+                    fieldInfo.serial = entityInfo.serial++;
+                    fieldInfo.information = StringUtil.pageInfo.get(trim);
+                    fieldInfo.isNecessary = false;
+                    fieldInfo.type = getType(returnType, trim, getGenericType(types), sub, json, repeatCheck);
+                    fieldInfo.nameCn = fieldInfo.information;
+                    entityInfo.fieldInfos.add(fieldInfo);
+                }
+            }
+            sub.add(entityInfo);
+        }
+    }
+
+    public static String getTrim(String args) {
+        if (StringUtil.isNotBlank(args) && args.startsWith("get")) {
+            String get = args.replace("get", "");
+            if (get.length() > 0) {
+                return get.replaceFirst(get.substring(0, 1), get.substring(0, 1).toLowerCase(Locale.ROOT));
+            } else {
+                return get;
+            }
+        }
+        return args;
+    }
+
     public static void getAllFields(List<PsiField> fields, PsiClass resolve) {
         if (resolve == null) {
             return;
@@ -226,7 +278,7 @@ public class InterfaceApiGen2 {
     }
 
     public static MethodApiInfo.FieldInfo getFieldInfo(MethodApiInfo.EntityInfo entityInfo, PsiField field,
-                                                       Map<PsiTypeParameter, PsiType> genericType,
+                                                       Map<String, PsiType> genericType,
                                                        List<MethodApiInfo.EntityInfo> sub, JSONObject json, RepeatCheck repeatCheck) {
         MethodApiInfo.FieldInfo fieldInfo = new MethodApiInfo.FieldInfo();
         PsiAnnotation annotation = field.getAnnotation(ApiModelProperty);
@@ -251,72 +303,117 @@ public class InterfaceApiGen2 {
         return args;
     }
 
-    public static Map<PsiTypeParameter, PsiType> getGenericType(PsiClassReferenceType type) {
+    public static Map<String, PsiType> getGenericType(PsiClassReferenceType type) {
         PsiClassType.ClassResolveResult classResolveResult = type.resolveGenerics();
         PsiClass element = classResolveResult.getElement();
         element.hasTypeParameters();
-        return classResolveResult.getSubstitutor().getSubstitutionMap();
+        Map<String, PsiType> map = new HashMap<>();
+        Map<PsiTypeParameter, PsiType> substitutionMap = classResolveResult.getSubstitutor().getSubstitutionMap();
+        if (substitutionMap != null) {
+            substitutionMap.forEach((k, v) -> {
+                map.put(k.getName(), v);
+            });
+        }
+        return map;
     }
 
     static String[] primitive = {"short", "byte", "int", "long", "boolean", "char", "float", "double"};
     static String[] primitives = {"数字整形", "数字整形", "数字整形", "数字整形", "布尔型", "字符型", "浮点型", "浮点型"};
     static Object[] primitiveValues = {0, 0, 0, 0, false, 'c', 0.1, 0.1};
 
-    public static String getPrimitive(PsiField field, JSONObject jsonObject) {
-        String name = ((PsiPrimitiveType) field.getType()).getName();
+    public static String getPrimitive(String fieldName, PsiType type, JSONObject jsonObject) {
+
         for (int i = 0; i < primitive.length; i++) {
+            String name = ((PsiPrimitiveType) type).getName();
             if (primitive[i].equals(name)) {
-                jsonObject.put(field.getName(), primitiveValues[i]);
+                jsonObject.put(fieldName, primitiveValues[i]);
                 return primitives[i];
             }
         }
         return null;
     }
 
-    public static String getType(PsiField field, Map<PsiTypeParameter, PsiType> genericType,
+
+    public static String getType(PsiField field, Map<String, PsiType> genericType,
                                  List<MethodApiInfo.EntityInfo> sub, JSONObject jsonObject, RepeatCheck repeatCheck) {
-        System.out.println(field.getName());
+        return getType(field.getType(), field.getName(), genericType, sub, jsonObject, repeatCheck);
+    }
+
+    public static String getType(PsiType types, String fieldName, Map<String, PsiType> genericType,
+                                 List<MethodApiInfo.EntityInfo> sub, JSONObject jsonObject, RepeatCheck repeatCheck) {
+        String name = fieldName;
+        System.out.println(name);
         // 处理原始数据类型
-        if (field.getType() instanceof PsiPrimitiveType) {
-            return getPrimitive(field, jsonObject);
+        if (types instanceof PsiPrimitiveType) {
+            return getPrimitive(name, types, jsonObject);
         }
-        PsiClassReferenceType type = (PsiClassReferenceType) field.getType();
+        PsiClassReferenceType type = (PsiClassReferenceType) types;
 
         // 处理泛型
         if (type.resolve() instanceof PsiTypeParameter) {
-            PsiType psiType = genericType.get((PsiTypeParameter) type.resolve());
+            PsiType psiType = genericType.get(type.resolve().getName());
             if (psiType == null || psiType instanceof PsiWildcardType) {
-                jsonObject.put(field.getName(), "object");
+                jsonObject.put(name, "object");
                 return "Object";
             }
             type = (PsiClassReferenceType) psiType;
         }
         // 处理通用对象
         if (isAssignable(type.resolve(), String.class.getName())) {
-            jsonObject.put(field.getName(), "string");
+            jsonObject.put(name, "string");
             return "字符型";
         }
         if (isAssignable(type.resolve(), Boolean.class.getName())) {
-            jsonObject.put(field.getName(), true);
+            jsonObject.put(name, true);
             return "布尔型";
         }
         if (isAssignable(type.resolve(), Integer.class.getName()) || isAssignable(type.resolve(), Long.class.getName())) {
-            jsonObject.put(field.getName(), 1);
+            jsonObject.put(name, 1);
             return "数字整型";
         }
         if (isAssignable(type.resolve(), Double.class.getName()) || isAssignable(type.resolve(), Float.class.getName())) {
-            jsonObject.put(field.getName(), 0.1);
+            jsonObject.put(name, 0.1);
             return "浮点型";
         }
         if (isAssignable(type.resolve(), Date.class.getName())) {
-            jsonObject.put(field.getName(), "1997-01-01");
+            jsonObject.put(name, "1997-01-01");
             return "日期型";
         }
 
         // 对象,json考虑循环引用
-        jsonObject.put(field.getName(), dealWithGeneric((PsiClassReferenceType) type, sub, repeatCheck));
+        jsonObject.put(name, dealWithGeneric((PsiClassReferenceType) type, genericType, sub, repeatCheck));
 
-        return type.getPresentableText();
+        return replaceParameter(type.getPresentableText(), genericType);
+    }
+
+    public static String replaceParameter(String s, Map<String, PsiType> genericType) {
+        if (s.contains("<")) {
+            Set<String> strings = splitAll(s);
+            String pre = s.substring(0, s.indexOf("<"));
+            String suf = s.substring(s.indexOf("<"));
+            for (String string : strings) {
+                if (genericType.containsKey(string)) {
+                    String presentableText = genericType.get(string).getPresentableText();
+                    if (presentableText != null) {
+                        suf = suf.replace(string, presentableText);
+                    }
+                }
+            }
+            return pre + suf;
+        }
+        return s;
+    }
+
+    public static Set<String> splitAll(String args) {
+        Set<String> set = new HashSet<>();
+        Set<String> set1 = new HashSet<>();
+        for (String s : args.split("<")) {
+            set1.addAll(List.of(s.split(">")));
+        }
+        for (String s : set1) {
+            set.addAll(List.of(s.split(",")));
+        }
+        return set.stream().map(String::trim).collect(Collectors.toSet());
     }
 
     public static boolean isAssignable(PsiClass psiClass, String args) {
@@ -352,7 +449,7 @@ public class InterfaceApiGen2 {
         return false;
     }
 
-    public static Object dealWithGeneric(PsiClassReferenceType type, List<MethodApiInfo.EntityInfo> sub, RepeatCheck repeatCheck) {
+    public static Object dealWithGeneric(PsiClassReferenceType type, Map<String, PsiType> genericType, List<MethodApiInfo.EntityInfo> sub, RepeatCheck repeatCheck) {
         if (type == null) {
             return null;
         }
@@ -371,7 +468,6 @@ public class InterfaceApiGen2 {
         // 处理集合
         else {
             JSONArray array = new JSONArray();
-            Map<PsiTypeParameter, PsiType> genericType = getGenericType(type);
             if (genericType == null) {
                 return array;
             }
@@ -380,7 +476,7 @@ public class InterfaceApiGen2 {
                 if (actualType instanceof PsiClassReferenceType) {
                     PsiClassReferenceType referenceType = (PsiClassReferenceType) actualType;
 
-                    array.add(dealWithGeneric(referenceType, sub, check));
+                    array.add(dealWithGeneric(referenceType, genericType, sub, check));
                 }
             }
             return array;
@@ -391,7 +487,10 @@ public class InterfaceApiGen2 {
                                     List<MethodApiInfo.EntityInfo> sub, RepeatCheck repeatCheck) {
         PsiClass resolve = actualType.resolve();
         if (resolve != null) {
-            // 防止循环迭代
+            String name = resolve.getName();
+            if (name != null && name.contains("IPage")) {
+                System.out.println();
+            }
 
             // 只解析apiModel注解的对象
             if (resolve.getAnnotation(ApiModel) != null
@@ -399,13 +498,19 @@ public class InterfaceApiGen2 {
                     && !entityExists(sub, resolve.getQualifiedName())) {
                 getEntityInfo(actualType, sub, json, repeatCheck);
             }
+
+            Map<String, PsiType> genericType = getGenericType(actualType);
             // 如果字段里面有集合 继续迭代解析
             List<PsiField> fields = new ArrayList<>();
             getAllFields(fields, resolve);
             if (fieldContainsCollection(fields)) {
                 for (PsiField field : fields) {
-                    getType(field, getGenericType(actualType), sub, json, repeatCheck);
+                    getType(field, genericType, sub, json, repeatCheck);
                 }
+            }
+            // 如果是泛型继续迭代
+            if (name != null && name.contains("IPage")) {
+                getPageInfo(actualType, sub, json, repeatCheck);
             }
         }
     }

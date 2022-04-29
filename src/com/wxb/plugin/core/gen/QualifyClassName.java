@@ -1,5 +1,8 @@
 package com.wxb.plugin.core.gen;
 
+import java.util.HashMap;
+import java.util.Map;
+
 public interface QualifyClassName {
     // swagger
     String Api = "io.swagger.annotations.Api";
@@ -18,4 +21,5 @@ public interface QualifyClassName {
     String restController = "org.springframework.web.bind.annotation.RestController";
 
     String collection = "java.util.Collection";
+
 }

@@ -15,7 +15,7 @@ public class MethodApiInfo {
     String title;
     String businessDesc;
     String tags;
-    String interfaceProvide ;
+    String interfaceProvide = "小硕数科";
     String requestExample;
     String responseExample;
     List<EntityInfo> paramEntities;
