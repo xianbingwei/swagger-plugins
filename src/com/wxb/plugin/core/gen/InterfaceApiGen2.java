@@ -497,6 +497,7 @@ public class InterfaceApiGen2 {
                     && !excludeClass.contains(resolve.getName())
                     && !entityExists(sub, resolve.getQualifiedName())) {
                 getEntityInfo(actualType, sub, json, repeatCheck);
+                return;
             }
 
             Map<String, PsiType> genericType = getGenericType(actualType);
@@ -507,10 +508,12 @@ public class InterfaceApiGen2 {
                 for (PsiField field : fields) {
                     getType(field, genericType, sub, json, repeatCheck);
                 }
+                return;
             }
             // 如果是泛型继续迭代
             if (name != null && name.contains("IPage")) {
                 getPageInfo(actualType, sub, json, repeatCheck);
+                return;
             }
         }
     }
