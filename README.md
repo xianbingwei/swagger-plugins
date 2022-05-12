@@ -9,7 +9,7 @@
 
 #### 安装教程
 
-1.  [下载](http://https://gitee.com/xianbingwei/swagger-plugin/releases/api%E7%94%9F%E6%88%90%E5%B7%A5%E5%85%B71.0%E7%89%88)
+1.  [下载](https://gitee.com/xianbingwei/swagger-plugin/blob/master/swagger-helper.zip)
 2.  安装
 ![输入图片说明](image1.png)
 3. 重启idea
