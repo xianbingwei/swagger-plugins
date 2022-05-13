@@ -65,7 +65,7 @@ public class InterfaceApiGen2 {
             psiClassList.add((PsiJavaFile) children);
         } else if (children instanceof PsiDirectory) {
             PsiElement[] elements = children.getChildren();
-            if (elements != null && elements.length > 1) {
+            if (elements != null && elements.length > 0) {
                 for (PsiElement child : elements) {
                     getPsiClass(child, psiClassList);
                 }
