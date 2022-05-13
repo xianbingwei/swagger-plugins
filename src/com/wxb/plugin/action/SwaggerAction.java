@@ -25,6 +25,7 @@ public class SwaggerAction extends AnAction {
 
 
     public String getStoreDir(AnActionEvent event) {
+
         Project project = event.getProject();
         String name = project.getName();
         if (project == null) {
